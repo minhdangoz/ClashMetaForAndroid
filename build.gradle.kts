@@ -2,6 +2,10 @@
 
 import com.android.build.gradle.AppExtension
 import com.android.build.gradle.BaseExtension
+import com.android.build.gradle.internal.api.BaseVariantOutputImpl
+import org.gradle.kotlin.dsl.register
+import org.gradle.language.nativeplatform.internal.Dimensions.applicationVariants
+import java.io.FileInputStream
 import java.net.URL
 import java.util.*
 
@@ -19,6 +23,16 @@ buildscript {
         classpath(libs.build.golang)
     }
 }
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = File(rootProject.projectDir, "keystore.properties")
+
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+} else {
+    println("--> keystore not exists ${keystorePropertiesFile.absoluteFile.path}")
+}
+
 
 subprojects {
     repositories {
@@ -75,6 +89,7 @@ subprojects {
             } else {
                 setProperty("archivesBaseName", "cmfa-$versionName")
             }
+
         }
 
         ndkVersion = "29.0.14206865"
@@ -88,6 +103,8 @@ subprojects {
                 }
             }
         }
+
+
 
         productFlavors {
             flavorDimensions("feature")
@@ -135,17 +152,12 @@ subprojects {
         }
 
         signingConfigs {
-            val keystore = rootProject.file("signing.properties")
-            if (keystore.exists()) {
-                create("release") {
-                    val prop = Properties().apply {
-                        keystore.inputStream().use(this::load)
-                    }
-
-                    storeFile = rootProject.file("release.keystore")
-                    storePassword = prop.getProperty("keystore.password")!!
-                    keyAlias = prop.getProperty("key.alias")!!
-                    keyPassword = prop.getProperty("key.password")!!
+            register("releaseKey") {
+                if (keystorePropertiesFile.exists()) {
+                    keyAlias = keystoreProperties.getProperty("keyAlias")
+                    keyPassword = keystoreProperties.getProperty("keyPassword")
+                    storeFile = file(keystoreProperties.getProperty("storeFileRelease"))
+                    storePassword = keystoreProperties.getProperty("storePassword")
                 }
             }
         }
@@ -154,7 +166,7 @@ subprojects {
             named("release") {
                 isMinifyEnabled = isApp
                 isShrinkResources = isApp
-                signingConfig = signingConfigs.findByName("release") ?: signingConfigs["debug"]
+                signingConfig = signingConfigs.findByName("releaseKey") ?: signingConfigs["debug"]
                 proguardFiles(
                     getDefaultProguardFile("proguard-android-optimize.txt"),
                     "proguard-rules.pro"
