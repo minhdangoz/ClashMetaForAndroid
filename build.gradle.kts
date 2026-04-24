@@ -46,8 +46,7 @@ subprojects {
         buildFeatures.buildConfig = true
         defaultConfig {
             if (isApp) {
-                val customApplicationId = queryConfigProperty("custom.application.id") as? String?
-                applicationId = customApplicationId.takeIf { it?.isNotBlank() == true } ?: "com.github.metacubex.clash"
+                applicationId = "com.cmcmedia.clash"
             }
 
             project.name.let { name ->
@@ -60,9 +59,6 @@ subprojects {
 
             versionName = "2.11.27"
             versionCode = 211027
-
-            resValue("string", "release_name", "v$versionName")
-            resValue("integer", "release_code", "$versionCode")
 
             ndk {
                 abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
@@ -108,8 +104,6 @@ subprojects {
 
                 buildConfigField("boolean", "PREMIUM", "Boolean.parseBoolean(\"false\")")
 
-                resValue("string", "launch_name", "@string/launch_name_alpha")
-                resValue("string", "application_name", "@string/application_name_alpha")
 
                 if (isApp && !removeSuffix) {
                     applicationIdSuffix = ".alpha"
@@ -124,9 +118,6 @@ subprojects {
                 }
 
                 buildConfigField("boolean", "PREMIUM", "Boolean.parseBoolean(\"false\")")
-
-                resValue("string", "launch_name", "@string/launch_name_meta")
-                resValue("string", "application_name", "@string/application_name_meta")
 
                 if (isApp && !removeSuffix) {
                     applicationIdSuffix = ".meta"

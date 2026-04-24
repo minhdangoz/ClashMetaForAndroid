@@ -48,6 +48,11 @@ object ProfileProcessor {
                     pending
                 }
 
+                // Jimmy - add for loading local file
+                if (snapshot.type == Profile.Type.File) {
+                    importLocalFile(context, snapshot.source)
+                }
+
                 val force = snapshot.type != Profile.Type.File
                 var cb = callback
 
@@ -161,6 +166,34 @@ object ProfileProcessor {
         }
     }
 
+    /**
+     *  Support both    file:// and raw path
+     *  Prefer          content://
+     */
+    private fun importLocalFile(context: Context, source: String) {
+        val uri = Uri.parse(source)
+
+        // Must be config.yaml
+        val target = context.processingDir.resolve("config.yaml")
+
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+                return
+            }
+        } catch (_: Exception) {}
+
+        // fallback for raw path
+        val file = java.io.File(uri.path ?: source)
+        file.inputStream().use { input ->
+            target.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+    }
+
     suspend fun update(context: Context, uuid: UUID, callback: IFetchObserver?) {
         withContext(NonCancellable) {
             processLock.withLock {
@@ -253,7 +286,7 @@ object ProfileProcessor {
             source.isEmpty() && type != Profile.Type.File ->
                 throw IllegalArgumentException("Invalid url")
 
-            source.isNotEmpty() && scheme != "https" && scheme != "http" && scheme != "content" ->
+            source.isNotEmpty() && scheme != "https" && scheme != "http" && scheme != "content" && !(scheme == "file" && type == Profile.Type.File) ->
                 throw IllegalArgumentException("Unsupported url $source")
 
             interval != 0L && TimeUnit.MILLISECONDS.toMinutes(interval) < 15 ->

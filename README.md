@@ -85,3 +85,14 @@ APP package name is `com.github.metacubex.clash.meta`
 - Manually triggering `Build Release` actions will compile, tag and publish a `Release` version.
   - You must fill the blank `Release Tag` with the tag you want to release in the format of `v1.2.3`.
   - `versionName` and `versionCode` in `build.gradle.kts` will be automatically bumped to the tag you filled above.
+
+
+#### JIMMY
+We might got issue with configuration cache.
+First download it without cache config
+./gradlew downloadGeoFiles --no-configuration-cache
+
+./gradlew app:assembleAlphaRelease --no-configuration-cache
+
+
+ am start -a android.intent.action.VIEW -d "clashmeta://install-config?url=http://file.thanglam.info/public/api/resources/download?hash=1LFw3yEqHcIZEjLeQO_ajQ"

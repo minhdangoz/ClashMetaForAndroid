@@ -35,7 +35,6 @@ tasks.getByName("clean", type = Delete::class) {
 val geoFilesDownloadDir = "src/main/assets"
 
 task("downloadGeoFiles") {
-
     val geoFilesUrls = mapOf(
         "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb" to "geoip.metadb",
         "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat" to "geosite.dat",
@@ -43,12 +42,27 @@ task("downloadGeoFiles") {
         "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb" to "ASN.mmdb",
     )
 
+    // Resolve all output files eagerly at configuration time
+    val outputFiles = geoFilesUrls.values.map { fileName ->
+        project.file("$geoFilesDownloadDir/$fileName")
+    }
+
+    outputs.upToDateWhen {
+        outputFiles.all { it.exists() }
+    }
+
     doLast {
-        geoFilesUrls.forEach { (downloadUrl, outputFileName) ->
-            val url = URL(downloadUrl)
-            val outputPath = file("$geoFilesDownloadDir/$outputFileName")
+        geoFilesUrls.entries.zip(outputFiles).forEach { (entry, outputPath) ->
+            val (downloadUrl, outputFileName) = entry
             outputPath.parentFile.mkdirs()
-            url.openStream().use { input ->
+
+            if (outputPath.exists()) {
+                println("$outputFileName already exists, skipping download")
+                return@forEach
+            }
+
+            println("Downloading $outputFileName...")
+            URL(downloadUrl).openStream().use { input ->
                 Files.copy(input, outputPath.toPath(), StandardCopyOption.REPLACE_EXISTING)
                 println("$outputFileName downloaded to $outputPath")
             }

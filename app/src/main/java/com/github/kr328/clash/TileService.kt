@@ -73,7 +73,7 @@ class TileService : TileService() {
             Tile.STATE_INACTIVE
 
         tile.label = if (currentProfile.isEmpty())
-            getText(R.string.launch_name)
+            "C-Clash"
         else
             currentProfile
 

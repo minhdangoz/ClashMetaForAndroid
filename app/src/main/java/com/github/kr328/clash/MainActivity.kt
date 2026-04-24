@@ -1,9 +1,14 @@
 package com.github.kr328.clash
 
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.PersistableBundle
+import android.provider.Settings
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.core.app.ActivityCompat
@@ -23,6 +28,7 @@ import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import com.github.kr328.clash.design.R
+import com.github.kr328.clash.util.PermissionHelper
 
 class MainActivity : BaseActivity<MainDesign>() {
     override suspend fun main() {
@@ -143,19 +149,39 @@ class MainActivity : BaseActivity<MainDesign>() {
         }
     }
 
+    private var permissionLauncher: ActivityResultLauncher<Array<String>>? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val requestPermissionLauncher =
-                registerForActivityResult(RequestPermission()
-                ) { isGranted: Boolean ->
-                }
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    android.Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+//            val requestPermissionLauncher =
+//                registerForActivityResult(RequestPermission()
+//                ) { isGranted: Boolean ->
+//                }
+//            if (ContextCompat.checkSelfPermission(
+//                    this,
+//                    android.Manifest.permission.POST_NOTIFICATIONS
+//                ) != PackageManager.PERMISSION_GRANTED) {
+//                requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+//            }
+//        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                intent.data = Uri.parse("package:${this.packageName}")
+                startActivity(intent)
+                return
             }
         }
+
+        permissionLauncher = registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) {
+            // Handle permission results
+        }
+
+        PermissionHelper(this).checkAndRequestPermissions(permissionLauncher)
     }
+
 }
