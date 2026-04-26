@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import com.github.kr328.clash.common.compat.registerReceiverCompat
 import com.github.kr328.clash.common.constants.Intents
 import com.github.kr328.clash.common.log.Log
+import com.github.kr328.clash.util.ResultBroadcast
 import java.util.*
 
 class Broadcasts(private val context: Application) {
@@ -25,6 +26,7 @@ class Broadcasts(private val context: Application) {
 
     private var registered = false
     private val receivers = mutableListOf<Observer>()
+
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.`package` != context?.packageName)
@@ -33,44 +35,54 @@ class Broadcasts(private val context: Application) {
             when (intent?.action) {
                 Intents.ACTION_SERVICE_RECREATED -> {
                     clashRunning = false
-
-                    receivers.forEach {
-                        it.onServiceRecreated()
-                    }
+                    Log.d("[Broadcasts] SERVICE_RECREATED → clashRunning=false")
+                    receivers.forEach { it.onServiceRecreated() }
                 }
                 Intents.ACTION_CLASH_STARTED -> {
                     clashRunning = true
-
-                    receivers.forEach {
-                        it.onStarted()
-                    }
+                    Log.d("[Broadcasts] CLASH_STARTED → clashRunning=true")
+                    receivers.forEach { it.onStarted() }
                 }
                 Intents.ACTION_CLASH_STOPPED -> {
                     clashRunning = false
-
-                    receivers.forEach {
-                        it.onStopped(intent.getStringExtra(Intents.EXTRA_STOP_REASON))
-                    }
+                    Log.d("[Broadcasts] CLASH_STOPPED → clashRunning=false cause=${intent.getStringExtra(Intents.EXTRA_STOP_REASON)}")
+                    receivers.forEach { it.onStopped(intent.getStringExtra(Intents.EXTRA_STOP_REASON)) }
                 }
-                Intents.ACTION_PROFILE_CHANGED ->
-                    receivers.forEach {
-                        it.onProfileChanged()
-                    }
-                Intents.ACTION_PROFILE_UPDATE_COMPLETED ->
-                    receivers.forEach {
-                        it.onProfileUpdateCompleted(
-                            UUID.fromString(intent.getStringExtra(Intents.EXTRA_UUID)))
-                    }
-                Intents.ACTION_PROFILE_UPDATE_FAILED ->
-                    receivers.forEach {
-                        it.onProfileUpdateFailed(
-                            UUID.fromString(intent.getStringExtra(Intents.EXTRA_UUID)),
-                            intent.getStringExtra(Intents.EXTRA_FAIL_REASON))
-                    }
+                Intents.ACTION_PROFILE_CHANGED -> {
+                    Log.d("[Broadcasts] PROFILE_CHANGED")
+                    receivers.forEach { it.onProfileChanged() }
+                }
+                Intents.ACTION_PROFILE_UPDATE_COMPLETED -> {
+                    val uuid = runCatching {
+                        UUID.fromString(intent.getStringExtra(Intents.EXTRA_UUID))
+                    }.getOrNull()
+                    Log.d("[Broadcasts] PROFILE_UPDATE_COMPLETED uuid=$uuid")
+                    receivers.forEach { it.onProfileUpdateCompleted(uuid) }
+                }
+                Intents.ACTION_PROFILE_UPDATE_FAILED -> {
+                    val uuid = runCatching {
+                        UUID.fromString(intent.getStringExtra(Intents.EXTRA_UUID))
+                    }.getOrNull()
+                    val reason = intent.getStringExtra(Intents.EXTRA_FAIL_REASON)
+                    Log.d("[Broadcasts] PROFILE_UPDATE_FAILED uuid=$uuid reason=$reason")
+                    receivers.forEach { it.onProfileUpdateFailed(uuid, reason) }
+                }
                 Intents.ACTION_PROFILE_LOADED -> {
-                    receivers.forEach {
-                        it.onProfileLoaded()
-                    }
+                    Log.d("[Broadcasts] PROFILE_LOADED")
+                    receivers.forEach { it.onProfileLoaded() }
+                }
+
+                // ----------------------------------------------------------------
+                // Automation result – log for debugging, no UI reaction needed
+                // (UI is already driven by CLASH_STARTED / CLASH_STOPPED above)
+                // ----------------------------------------------------------------
+                ResultBroadcast.ACTION_RESULT -> {
+                    val success  = intent.getBooleanExtra(ResultBroadcast.EXTRA_SUCCESS, false)
+                    val event    = intent.getStringExtra(ResultBroadcast.EXTRA_EVENT) ?: "?"
+                    val msg      = intent.getStringExtra(ResultBroadcast.EXTRA_MESSAGE) ?: ""
+                    val healthOk = intent.getBooleanExtra(ResultBroadcast.EXTRA_HEALTH_OK, false)
+                    val latency  = intent.getLongExtra(ResultBroadcast.EXTRA_LATENCY, -1L)
+                    Log.d("[Broadcasts] AUTOMATION_RESULT event=$event success=$success health=$healthOk latency=${latency}ms msg=$msg")
                 }
             }
         }
@@ -85,8 +97,7 @@ class Broadcasts(private val context: Application) {
     }
 
     fun register() {
-        if (registered)
-            return
+        if (registered) return
 
         try {
             context.registerReceiverCompat(broadcastReceiver, IntentFilter().apply {
@@ -97,22 +108,25 @@ class Broadcasts(private val context: Application) {
                 addAction(Intents.ACTION_PROFILE_UPDATE_COMPLETED)
                 addAction(Intents.ACTION_PROFILE_UPDATE_FAILED)
                 addAction(Intents.ACTION_PROFILE_LOADED)
+                addAction(ResultBroadcast.ACTION_RESULT)   // ← new
             })
 
             clashRunning = StatusClient(context).currentProfile() != null
+            Log.d("[Broadcasts] Registered. clashRunning=$clashRunning")
+            registered = true
         } catch (e: Exception) {
             Log.w("Register global receiver: $e", e)
         }
     }
 
     fun unregister() {
-        if (!registered)
-            return
+        if (!registered) return
 
         try {
             context.unregisterReceiver(broadcastReceiver)
-
             clashRunning = false
+            registered = false
+            Log.d("[Broadcasts] Unregistered")
         } catch (e: Exception) {
             Log.w("Unregister global receiver: $e", e)
         }

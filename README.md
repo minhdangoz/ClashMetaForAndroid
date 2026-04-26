@@ -8,7 +8,7 @@ Feature of [Clash.Meta](https://github.com/MetaCubeX/Clash.Meta)
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
      alt="Get it on F-Droid"
-     height="80">](https://f-droid.org/packages/com.github.metacubex.clash.meta/)
+     height="80">](https://f-droid.org/packages/`packageName`/)
 
 ### Requirement
 
@@ -57,14 +57,14 @@ Feature of [Clash.Meta](https://github.com/MetaCubeX/Clash.Meta)
 
 ### Automation
 
-APP package name is `com.github.metacubex.clash.meta`
+APP package name is ``packageName``
 
 - Toggle Clash.Meta service status
-  - Send intent to activity `com.github.kr328.clash.ExternalControlActivity` with action `com.github.metacubex.clash.meta.action.TOGGLE_CLASH`
+  - Send intent to activity `com.github.kr328.clash.ExternalControlActivity` with action ``packageName`.action.TOGGLE_CLASH`
 - Start Clash.Meta service
-  - Send intent to activity `com.github.kr328.clash.ExternalControlActivity` with action `com.github.metacubex.clash.meta.action.START_CLASH`
+  - Send intent to activity `com.github.kr328.clash.ExternalControlActivity` with action ``packageName`.action.START_CLASH`
 - Stop Clash.Meta service
-  - Send intent to activity `com.github.kr328.clash.ExternalControlActivity` with action `com.github.metacubex.clash.meta.action.STOP_CLASH`
+  - Send intent to activity `com.github.kr328.clash.ExternalControlActivity` with action ``packageName`.action.STOP_CLASH`
 - Import a profile
   - URL Scheme `clash://install-config?url=<encoded URI>` or `clashmeta://install-config?url=<encoded URI>`
 
@@ -94,5 +94,14 @@ First download it without cache config
 
 ./gradlew app:assembleAlphaRelease --no-configuration-cache
 
+CREATE PROFILE | LOAD CONFIG
+am start -a android.intent.action.VIEW -d "clashmeta://install-config?url=http://file.thanglam.info/public/api/resources/download?hash=K5n00a6dpuwowNGoyEfBtA"
 
- am start -a android.intent.action.VIEW -d "clashmeta://install-config?url=http://file.thanglam.info/public/api/resources/download?hash=K5n00a6dpuwowNGoyEfBtA"
+START
+am start -a com.cmcmedia.clash.action.START_CLASH -n com.cmcmedia.clash/com.github.kr328.clash.ExternalControlActivity
+
+STOP
+am start -a com.cmcmedia.clash.action.STOP_CLASH -n com.cmcmedia.clash/com.github.kr328.clash.ExternalControlActivity
+
+TOGGLE
+am start -a com.cmcmedia.clash.action.TOGGLE_CLASH -n com.cmcmedia.clash/com.github.kr328.clash.ExternalControlActivity
