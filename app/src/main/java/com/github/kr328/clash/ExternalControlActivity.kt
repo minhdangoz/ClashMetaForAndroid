@@ -31,25 +31,23 @@ import com.github.kr328.clash.design.R
  * Entry point for all automation intents. Supports:
  *
  * 1. clash://install-config?url=…&name=…&type=url|file
- *    → create profile (or reuse existing by URL), commit (no UI), set active, start VPN,
- *      health-check, broadcast+finish with rich result.
+ *    → create/reuse profile, commit, set active, start VPN, health-check, broadcast result
  *
- * 2. ACTION_START_CLASH  – start VPN + health check + broadcast result
- * 3. ACTION_STOP_CLASH   – stop VPN + broadcast result
- * 4. ACTION_TOGGLE_CLASH – toggle VPN
+ * 2. ACTION_START_CLASH        – start VPN + health check + broadcast result
+ * 3. ACTION_STOP_CLASH         – stop VPN + broadcast result
+ * 4. ACTION_TOGGLE_CLASH       – toggle VPN
+ * 5. ACTION_UPDATE_PROFILE     – re-commit active profile, restart VPN, health check
  *
- * Result broadcast action : com.cmcmedia.clash.action.AUTOMATION_RESULT
- * Extras on broadcast/Activity result:
- *   success   (Boolean)
- *   event     (String)  PROFILE_CREATED | PROXY_STARTED | PROXY_STOPPED | HEALTH_CHECK
- *   message   (String)
- *   health_ok (Boolean) – only for PROXY_STARTED
- *   latency_ms(Long)    – only when health_ok = true
+ * Result broadcast: com.cmcmedia.clash.action.AUTOMATION_RESULT
+ * Extras: success(bool), event(string), message(string), health_ok(bool), latency_ms(long)
  */
 class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
 
-    // How long to wait for the VPN tunnel to become active before health-checking.
     private val VPN_SETTLE_MS = 2_000L
+
+    companion object {
+        const val ACTION_UPDATE_PROFILE = "com.cmcmedia.clash.action.UPDATE_PROFILE"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,10 +85,69 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
                 if (Remote.broadcasts.clashRunning) stopClash() else launch { startClashAndCheck() }
             }
 
+            ACTION_UPDATE_PROFILE -> launch { handleUpdateProfile() }
+
             else -> {
                 AutoLog.w("ExtControl", "Unknown action: ${intent.action}")
                 doFinish()
             }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Update active profile flow
+    // -------------------------------------------------------------------------
+
+    private suspend fun handleUpdateProfile() {
+        AutoLog.i("ExtControl", "UPDATE_PROFILE requested")
+
+        try {
+            // --- Step 1: get active profile ---
+            val active = withProfile { queryActive() }
+
+            if (active == null) {
+                AutoLog.e("ExtControl", "No active profile found")
+                sendResult(ResultBroadcast.Event.PROFILE_UPDATED, false, "No active profile")
+                finishWithResult(ResultBroadcast.Event.PROFILE_UPDATED, false, "No active profile")
+                return
+            }
+
+            AutoLog.i("ExtControl", "Updating active profile: name=${active.name} uuid=${active.uuid} source=${active.source}")
+
+            // --- Step 2: stop VPN if running so the new config can be applied cleanly ---
+            val wasRunning = Remote.broadcasts.clashRunning
+            if (wasRunning) {
+                AutoLog.d("ExtControl", "Stopping VPN before profile update")
+                stopClashService()
+                // Wait for the stop broadcast to be processed
+                delay(1_000L)
+            }
+
+            // --- Step 3: re-fetch config for the imported profile ---
+            // commit() only works on pending profiles (PendingDao).
+            // An active imported profile must use update() which calls
+            // ProfileProcessor.update() → re-downloads and validates the config.
+            AutoLog.d("ExtControl", "Updating imported profile uuid=${active.uuid}")
+            withProfile {
+                update(active.uuid)
+            }
+            AutoLog.i("ExtControl", "Profile update complete")
+
+            sendResult(ResultBroadcast.Event.PROFILE_UPDATED, true, "Profile updated: ${active.name}")
+
+            // --- Step 4: restart VPN + health check ---
+            if (wasRunning) {
+                AutoLog.d("ExtControl", "Restarting VPN after profile update")
+                startClashAndCheck(event = ResultBroadcast.Event.PROFILE_UPDATED)
+            } else {
+                AutoLog.d("ExtControl", "VPN was not running before update, skipping restart")
+                finishWithResult(ResultBroadcast.Event.PROFILE_UPDATED, true, "Profile updated: ${active.name}")
+            }
+
+        } catch (e: Exception) {
+            AutoLog.e("ExtControl", "Profile update failed: ${e.message}", e)
+            sendResult(ResultBroadcast.Event.PROFILE_UPDATED, false, "Update failed: ${e.message}")
+            finishWithResult(ResultBroadcast.Event.PROFILE_UPDATED, false, "Update failed: ${e.message}")
         }
     }
 
@@ -142,15 +199,12 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
                     doFinish(); return@launch
                 }
 
-                // --- Step 2: commit (download + validate config, sets active automatically) ---
+                // --- Step 2: commit (download + validate + sets active automatically) ---
                 if (profile.pending || !profile.imported) {
                     AutoLog.i("ExtControl", "Committing profile uuid=${profile.uuid}")
-                    withProfile {
-                        commit(profile.uuid)   // ProfileProcessor.apply() → sets activeProfile
-                    }
+                    withProfile { commit(profile.uuid) }
                     AutoLog.i("ExtControl", "Commit complete, profile is now active")
                 } else {
-                    // Already imported – just set it active
                     AutoLog.i("ExtControl", "Profile already imported, setting active uuid=${profile.uuid}")
                     withProfile { setActive(profile) }
                 }
@@ -172,39 +226,32 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
     // VPN start + health check
     // -------------------------------------------------------------------------
 
-    private suspend fun startClashAndCheck() {
+    private suspend fun startClashAndCheck(event: String = ResultBroadcast.Event.PROXY_STARTED) {
         AutoLog.i("ExtControl", "Requesting VPN start")
 
         val vpnPermissionIntent = startClashService()
 
         if (vpnPermissionIntent != null) {
-            // VPN permission not yet granted – we cannot proceed headlessly.
             AutoLog.w("ExtControl", "VPN permission required, launching MainActivity")
-            startActivity(
-                MainActivity::class.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-            sendResult(
-                ResultBroadcast.Event.PROXY_STARTED,
-                false,
-                "VPN permission required – please grant in UI"
-            )
+            startActivity(MainActivity::class.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            sendResult(event, false, "VPN permission required – please grant in UI")
             doFinish()
             return
         }
 
-        // Wait for tunnel to settle before health-checking
         AutoLog.d("ExtControl", "VPN service started, waiting ${VPN_SETTLE_MS}ms for tunnel to settle")
         delay(VPN_SETTLE_MS)
 
-        // --- Health check ---
         AutoLog.i("ExtControl", "Running health check")
         val health = HealthCheck.run()
 
+        val message = if (health.ok) "VPN started & proxy healthy (${health.latencyMs}ms)"
+        else "VPN started but health check failed: ${health.message}"
+
         sendResult(
-            event     = ResultBroadcast.Event.PROXY_STARTED,
+            event     = event,
             success   = health.ok,
-            message   = if (health.ok) "VPN started & proxy healthy (${health.latencyMs}ms)"
-                        else "VPN started but health check failed: ${health.message}",
+            message   = message,
             healthOk  = health.ok,
             latencyMs = health.latencyMs.takeIf { it >= 0 },
         )
@@ -217,7 +264,7 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
         ).show()
 
         finishWithResult(
-            event     = ResultBroadcast.Event.PROXY_STARTED,
+            event     = event,
             success   = health.ok,
             message   = health.message,
             healthOk  = health.ok,
@@ -239,9 +286,7 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
 
     // -------------------------------------------------------------------------
 
-    private fun doFinish() {
-        finish()
-    }
+    private fun doFinish() = finish()
 
     override fun finish() {
         super.finish()
@@ -251,6 +296,6 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
 
     override fun onDestroy() {
         super.onDestroy()
-        cancel()  // cancel coroutine scope
+        cancel()
     }
 }

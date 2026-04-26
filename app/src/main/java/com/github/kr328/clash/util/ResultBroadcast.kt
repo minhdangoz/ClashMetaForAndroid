@@ -38,6 +38,7 @@ object ResultBroadcast {
         const val PROXY_STARTED   = "PROXY_STARTED"
         const val PROXY_STOPPED   = "PROXY_STOPPED"
         const val HEALTH_CHECK    = "HEALTH_CHECK"
+        const val PROFILE_UPDATED  = "PROFILE_UPDATED"
     }
 
     /** Send a result broadcast visible within this app's process. */

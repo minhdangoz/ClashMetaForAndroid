@@ -105,3 +105,12 @@ am start -a com.cmcmedia.clash.action.STOP_CLASH -n com.cmcmedia.clash/com.githu
 
 TOGGLE
 am start -a com.cmcmedia.clash.action.TOGGLE_CLASH -n com.cmcmedia.clash/com.github.kr328.clash.ExternalControlActivity
+
+UPDATE PROFILE
+val intent = Intent("com.cmcmedia.clash.action.UPDATE_PROFILE").apply {
+setClassName("com.cmcmedia.clash", "com.cmcmedia.clash.ExternalControlActivity")
+addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+}
+startActivity(intent)
+Or via ADB:
+am start -a com.cmcmedia.clash.action.UPDATE_PROFILE -n com.cmcmedia.clash/com.github.kr328.clash.ExternalControlActivity
