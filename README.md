@@ -98,19 +98,19 @@ CREATE PROFILE | LOAD CONFIG
 am start -a android.intent.action.VIEW -d "clashmeta://install-config?url=http://file.thanglam.info/public/api/resources/download?hash=Ca-U6UbBceZ8v6rdKeCTBA"
 
 START
-am start -a com.cmcmedia.clash.action.START_CLASH -n com.cmcmedia.clash/com.github.kr328.clash.ExternalControlActivity
+am start -a com.cmcmedia.proxy.action.START_CLASH -n com.cmcmedia.proxy/com.github.kr328.clash.ExternalControlActivity
 
 STOP
-am start -a com.cmcmedia.clash.action.STOP_CLASH -n com.cmcmedia.clash/com.github.kr328.clash.ExternalControlActivity
+am start -a com.cmcmedia.proxy.action.STOP_CLASH -n com.cmcmedia.proxy/com.github.kr328.clash.ExternalControlActivity
 
 TOGGLE
-am start -a com.cmcmedia.clash.action.TOGGLE_CLASH -n com.cmcmedia.clash/com.github.kr328.clash.ExternalControlActivity
+am start -a com.cmcmedia.proxy.action.TOGGLE_CLASH -n com.cmcmedia.proxy/com.github.kr328.clash.ExternalControlActivity
 
 UPDATE PROFILE
-val intent = Intent("com.cmcmedia.clash.action.UPDATE_PROFILE").apply {
-setClassName("com.cmcmedia.clash", "com.cmcmedia.clash.ExternalControlActivity")
+val intent = Intent("com.cmcmedia.proxy.action.UPDATE_PROFILE").apply {
+setClassName("com.cmcmedia.proxy", "com.github.kr328.clash.ExternalControlActivity")
 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }
 startActivity(intent)
 Or via ADB:
-am start -a com.cmcmedia.clash.action.UPDATE_PROFILE -n com.cmcmedia.clash/com.github.kr328.clash.ExternalControlActivity
+am start -a com.cmcmedia.proxy.action.UPDATE_PROFILE -n com.cmcmedia.proxy/com.github.kr328.clash.ExternalControlActivity

@@ -2,7 +2,7 @@
 <!--
     Changes vs original:
     1. Added exported receiver "AutomationResultReceiver" so external apps can
-       receive com.cmcmedia.clash.action.AUTOMATION_RESULT broadcasts.
+       receive com.cmcmedia.proxy.action.AUTOMATION_RESULT broadcasts.
     2. Added intent-filter for ACTION_VIEW on ExternalControlActivity with the
        correct clash:// / clashmeta:// schemes (was already there, kept intact).
     3. No other changes – everything else is identical to the original.
@@ -116,7 +116,7 @@
 
         <!--
             External apps can register for this broadcast to receive rich results:
-              com.cmcmedia.clash.action.AUTOMATION_RESULT
+              com.cmcmedia.proxy.action.AUTOMATION_RESULT
             Extras: success(bool), event(string), message(string),
                     health_ok(bool), latency_ms(long)
         -->
@@ -124,7 +124,7 @@
             android:name=".AutomationResultReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.cmcmedia.clash.action.AUTOMATION_RESULT" />
+                <action android:name="com.cmcmedia.proxy.action.AUTOMATION_RESULT" />
             </intent-filter>
         </receiver>
 

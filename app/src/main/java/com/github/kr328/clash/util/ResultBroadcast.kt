@@ -14,7 +14,7 @@ import com.github.kr328.clash.service.util.sendBroadcastSelf
  *   2. An explicit result  → so the originating Activity can setResult() for
  *      startActivityForResult() callers
  *
- * Broadcast action  : com.cmcmedia.clash.action.AUTOMATION_RESULT
+ * Broadcast action  : com.cmcmedia.proxy.action.AUTOMATION_RESULT
  * Extras:
  *   EXTRA_SUCCESS   (Boolean) – overall success
  *   EXTRA_EVENT     (String)  – one of: PROFILE_CREATED, PROXY_STARTED,
@@ -25,7 +25,7 @@ import com.github.kr328.clash.service.util.sendBroadcastSelf
  */
 object ResultBroadcast {
 
-    const val ACTION_RESULT   = "com.cmcmedia.clash.action.AUTOMATION_RESULT"
+    const val ACTION_RESULT   = "com.cmcmedia.proxy.action.AUTOMATION_RESULT"
 
     const val EXTRA_SUCCESS   = "success"
     const val EXTRA_EVENT     = "event"

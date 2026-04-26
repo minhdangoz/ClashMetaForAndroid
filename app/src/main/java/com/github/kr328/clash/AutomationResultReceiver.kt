@@ -10,14 +10,14 @@ import com.github.kr328.clash.util.ResultBroadcast
  * AutomationResultReceiver
  * ========================
  * Exported stub receiver that other apps can use as a reference for how to
- * receive com.cmcmedia.clash.action.AUTOMATION_RESULT broadcasts.
+ * receive com.cmcmedia.proxy.action.AUTOMATION_RESULT broadcasts.
  *
  * You do NOT need to modify this class. External apps should declare their own
  * BroadcastReceiver registered for ACTION_RESULT.
  *
  * Example from an external app:
  *
- *   val filter = IntentFilter("com.cmcmedia.clash.action.AUTOMATION_RESULT")
+ *   val filter = IntentFilter("com.cmcmedia.proxy.action.AUTOMATION_RESULT")
  *   registerReceiver(myReceiver, filter)
  *
  *   // In myReceiver.onReceive():

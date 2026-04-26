@@ -61,7 +61,7 @@ subprojects {
         buildFeatures.buildConfig = true
         defaultConfig {
             if (isApp) {
-                applicationId = "com.cmcmedia.clash"
+                applicationId = "com.cmcmedia.proxy"
             }
 
             project.name.let { name ->
@@ -72,8 +72,8 @@ subprojects {
             minSdk = 21
             targetSdk = 35
 
-            versionName = "2.11.27"
-            versionCode = 211027
+            versionName = "511.11.11"
+            versionCode = 5111111
 
             ndk {
                 abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")

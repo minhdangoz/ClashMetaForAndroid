@@ -38,15 +38,16 @@ import com.github.kr328.clash.design.R
  * 4. ACTION_TOGGLE_CLASH       – toggle VPN
  * 5. ACTION_UPDATE_PROFILE     – re-commit active profile, restart VPN, health check
  *
- * Result broadcast: com.cmcmedia.clash.action.AUTOMATION_RESULT
+ * Result broadcast: com.cmcmedia.proxy.action.AUTOMATION_RESULT
  * Extras: success(bool), event(string), message(string), health_ok(bool), latency_ms(long)
  */
 class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
 
     private val VPN_SETTLE_MS = 2_000L
+    private val REQUEST_VPN = 1001
 
     companion object {
-        const val ACTION_UPDATE_PROFILE = "com.cmcmedia.clash.action.UPDATE_PROFILE"
+        const val ACTION_UPDATE_PROFILE = "com.cmcmedia.proxy.action.UPDATE_PROFILE"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -222,6 +223,36 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == REQUEST_VPN) {
+            if (resultCode == RESULT_OK) {
+                AutoLog.i("ExtControl", "VPN permission granted")
+
+                // Start UI AFTER permission is granted
+                startActivity(
+                    MainActivity::class.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+
+                launch {
+                    startClashAndCheck()
+                }
+
+            } else {
+                AutoLog.e("ExtControl", "VPN permission denied")
+
+                sendResult(
+                    ResultBroadcast.Event.PROXY_STARTED,
+                    false,
+                    "VPN permission denied"
+                )
+
+                doFinish()
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // VPN start + health check
     // -------------------------------------------------------------------------
@@ -232,10 +263,12 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
         val vpnPermissionIntent = startClashService()
 
         if (vpnPermissionIntent != null) {
-            AutoLog.w("ExtControl", "VPN permission required, launching MainActivity")
-            startActivity(MainActivity::class.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            sendResult(event, false, "VPN permission required – please grant in UI")
-            doFinish()
+            AutoLog.w("ExtControl", "⚠\uFE0F VPN permission required, launching MainActivity")
+            // do not start here, cause activity result not called
+            // startActivity(MainActivity::class.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            startActivityForResult(vpnPermissionIntent, REQUEST_VPN)
+            // sendResult(event, false, "VPN permission required – please grant in UI")
+            // doFinish()
             return
         }
 
