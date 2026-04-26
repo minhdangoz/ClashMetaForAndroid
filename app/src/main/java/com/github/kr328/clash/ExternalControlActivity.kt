@@ -21,6 +21,7 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import java.util.*
 import com.github.kr328.clash.design.R
+import com.github.kr328.clash.service.StatusProvider.Companion.currentProfile
 
 class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,10 +77,13 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
     }
 
     private fun startClash() {
-//        if (currentProfile == null) {
-//            Toast.makeText(this, R.string.no_profile_selected, Toast.LENGTH_LONG).show()
-//            return
-//        }
+        if (currentProfile == null) {
+            Toast.makeText(this, R.string.no_profile_selected, Toast.LENGTH_LONG).show()
+            return
+        } else {
+            Toast.makeText(this, "Current profile: currentProfile", Toast.LENGTH_LONG).show()
+
+        }
         val vpnRequest = startClashService()
         if (vpnRequest != null) {
             Toast.makeText(this, R.string.unable_to_start_vpn, Toast.LENGTH_LONG).show()

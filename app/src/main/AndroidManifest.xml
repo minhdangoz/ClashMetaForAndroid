@@ -72,7 +72,7 @@
 
         <activity
             android:name=".ExternalControlActivity"
-            android:excludeFromRecents="true"
+            android:excludeFromRecents="false"
             android:exported="true"
             android:label="@string/external_control_activity"
             android:noHistory="true"

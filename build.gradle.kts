@@ -3,6 +3,7 @@
 import com.android.build.gradle.AppExtension
 import com.android.build.gradle.BaseExtension
 import com.android.build.gradle.internal.api.BaseVariantOutputImpl
+import org.apache.tools.ant.util.StringUtils.removeSuffix
 import org.gradle.kotlin.dsl.register
 import org.gradle.language.nativeplatform.internal.Dimensions.applicationVariants
 import java.io.FileInputStream
@@ -109,36 +110,19 @@ subprojects {
         productFlavors {
             flavorDimensions("feature")
 
-            val removeSuffix = (queryConfigProperty("remove.suffix") as? String)?.toBoolean() == true
-
             create("alpha") {
                 isDefault = true
                 dimension = flavorDimensionList[0]
-                if (!removeSuffix) {
-                    versionNameSuffix = ".Alpha"
-                }
-
 
                 buildConfigField("boolean", "PREMIUM", "Boolean.parseBoolean(\"false\")")
 
-
-                if (isApp && !removeSuffix) {
-                    applicationIdSuffix = ".alpha"
-                }
             }
 
             create("meta") {
 
                 dimension = flavorDimensionList[0]
-                if (!removeSuffix) {
-                    versionNameSuffix = ".Meta"
-                }
 
                 buildConfigField("boolean", "PREMIUM", "Boolean.parseBoolean(\"false\")")
-
-                if (isApp && !removeSuffix) {
-                    applicationIdSuffix = ".meta"
-                }
             }
         }
 
@@ -174,6 +158,7 @@ subprojects {
             }
             named("debug") {
                 versionNameSuffix = ".debug"
+                signingConfig = signingConfigs.findByName("releaseKey") ?: signingConfigs["debug"]
             }
         }
 
