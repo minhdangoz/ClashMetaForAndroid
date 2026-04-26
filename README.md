@@ -95,7 +95,7 @@ First download it without cache config
 ./gradlew app:assembleAlphaRelease --no-configuration-cache
 
 CREATE PROFILE | LOAD CONFIG
-am start -a android.intent.action.VIEW -d "clashmeta://install-config?url=http://file.thanglam.info/public/api/resources/download?hash=K5n00a6dpuwowNGoyEfBtA"
+am start -a android.intent.action.VIEW -d "clashmeta://install-config?url=http://file.thanglam.info/public/api/resources/download?hash=Ca-U6UbBceZ8v6rdKeCTBA"
 
 START
 am start -a com.cmcmedia.clash.action.START_CLASH -n com.cmcmedia.clash/com.github.kr328.clash.ExternalControlActivity

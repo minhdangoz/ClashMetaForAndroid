@@ -9,7 +9,7 @@ import com.github.kr328.clash.common.compat.registerReceiverCompat
 import com.github.kr328.clash.common.constants.Intents
 import com.github.kr328.clash.common.log.Log
 import com.github.kr328.clash.util.ResultBroadcast
-import java.util.*
+import java.util.UUID
 
 class Broadcasts(private val context: Application) {
     interface Observer {
@@ -71,11 +71,6 @@ class Broadcasts(private val context: Application) {
                     Log.d("[Broadcasts] PROFILE_LOADED")
                     receivers.forEach { it.onProfileLoaded() }
                 }
-
-                // ----------------------------------------------------------------
-                // Automation result – log for debugging, no UI reaction needed
-                // (UI is already driven by CLASH_STARTED / CLASH_STOPPED above)
-                // ----------------------------------------------------------------
                 ResultBroadcast.ACTION_RESULT -> {
                     val success  = intent.getBooleanExtra(ResultBroadcast.EXTRA_SUCCESS, false)
                     val event    = intent.getStringExtra(ResultBroadcast.EXTRA_EVENT) ?: "?"
@@ -96,6 +91,18 @@ class Broadcasts(private val context: Application) {
         receivers.remove(observer)
     }
 
+    /**
+     * Register the broadcast receiver for the Application's full lifetime.
+     * Called once from Remote.launch() → onVisibleChanged(true).
+     *
+     * Previously this was paired with unregister() on invisible, which caused
+     * ACTION_CLASH_STARTED to be missed during the invisible window, leaving
+     * clashRunning stale (false) on re-open even when clash was running.
+     *
+     * The receiver now stays registered permanently. Per-activity observers are
+     * added/removed via addObserver/removeObserver in BaseActivity.onStart/onStop,
+     * so UI callbacks still only fire when an activity is visible.
+     */
     fun register() {
         if (registered) return
 
@@ -108,27 +115,30 @@ class Broadcasts(private val context: Application) {
                 addAction(Intents.ACTION_PROFILE_UPDATE_COMPLETED)
                 addAction(Intents.ACTION_PROFILE_UPDATE_FAILED)
                 addAction(Intents.ACTION_PROFILE_LOADED)
-                addAction(ResultBroadcast.ACTION_RESULT)   // ← new
+                addAction(ResultBroadcast.ACTION_RESULT)
             })
 
-            clashRunning = StatusClient(context).currentProfile() != null
-            Log.d("[Broadcasts] Registered. clashRunning=$clashRunning")
+            // Initialise conservatively. The running service will immediately
+            // send ACTION_CLASH_STARTED if clash is actually up, which sets
+            // clashRunning = true within milliseconds.
+            clashRunning = false
             registered = true
+            Log.d("[Broadcasts] Registered permanently on Application. clashRunning=false until CLASH_STARTED arrives.")
         } catch (e: Exception) {
             Log.w("Register global receiver: $e", e)
         }
     }
 
+    /**
+     * No-op — the receiver is intentionally kept registered for the app lifetime.
+     *
+     * Called by Remote when the app goes invisible, but we now ignore it so we
+     * never miss ACTION_CLASH_STARTED during the invisible window.
+     *
+     * Per-activity UI callbacks are already gated by addObserver/removeObserver,
+     * so no spurious UI updates occur while the app is in the background.
+     */
     fun unregister() {
-        if (!registered) return
-
-        try {
-            context.unregisterReceiver(broadcastReceiver)
-            clashRunning = false
-            registered = false
-            Log.d("[Broadcasts] Unregistered")
-        } catch (e: Exception) {
-            Log.w("Unregister global receiver: $e", e)
-        }
+        Log.d("[Broadcasts] unregister() called but intentionally ignored — receiver stays active to track clashRunning accurately.")
     }
 }

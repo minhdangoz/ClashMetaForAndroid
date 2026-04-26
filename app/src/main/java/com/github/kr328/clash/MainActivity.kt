@@ -1,18 +1,13 @@
 package com.github.kr328.clash
 
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.os.PersistableBundle
 import android.provider.Settings
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.github.kr328.clash.common.util.intent
 import com.github.kr328.clash.common.util.ticker
 import com.github.kr328.clash.design.MainDesign
@@ -90,6 +85,9 @@ class MainActivity : BaseActivity<MainDesign>() {
     }
 
     private suspend fun MainDesign.fetch() {
+        // clashRunning is now always accurate because Broadcasts.unregister()
+        // is a no-op — the receiver stays registered for the app lifetime and
+        // cannot miss ACTION_CLASH_STARTED during the invisible window.
         setClashRunning(clashRunning)
 
         val state = withClash {
@@ -122,7 +120,6 @@ class MainActivity : BaseActivity<MainDesign>() {
                     startActivity(ProfilesActivity::class.intent)
                 }
             }
-
             return
         }
 
@@ -134,7 +131,6 @@ class MainActivity : BaseActivity<MainDesign>() {
                     ActivityResultContracts.StartActivityForResult(),
                     vpnRequest
                 )
-
                 if (result.resultCode == RESULT_OK)
                     startClashService()
             }
@@ -153,18 +149,6 @@ class MainActivity : BaseActivity<MainDesign>() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-//            val requestPermissionLauncher =
-//                registerForActivityResult(RequestPermission()
-//                ) { isGranted: Boolean ->
-//                }
-//            if (ContextCompat.checkSelfPermission(
-//                    this,
-//                    android.Manifest.permission.POST_NOTIFICATIONS
-//                ) != PackageManager.PERMISSION_GRANTED) {
-//                requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-//            }
-//        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
@@ -183,5 +167,4 @@ class MainActivity : BaseActivity<MainDesign>() {
 
         PermissionHelper(this).checkAndRequestPermissions(permissionLauncher)
     }
-
 }
