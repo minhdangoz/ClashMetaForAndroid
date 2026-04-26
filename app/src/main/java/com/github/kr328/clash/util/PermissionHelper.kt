@@ -45,7 +45,7 @@ class PermissionHelper(private val activity: Activity) {
             true
         } else {
             // Request permissions
-            android.util.Log.d(TAG, "--> Request permissions")
+            // android.util.Log.d(TAG, "--> Request permissions")
 
             permissionLauncher?.launch(permissionsToRequest.toTypedArray())
             false
