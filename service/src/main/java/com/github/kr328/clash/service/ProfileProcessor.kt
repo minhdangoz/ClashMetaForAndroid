@@ -22,7 +22,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.math.BigDecimal
-import java.net.URL
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -78,7 +77,7 @@ object ProfileProcessor {
                         var download: Long = 0
                         var total: Long = 0
                         var expire: Long = 0
-                        if (snapshot?.type == Profile.Type.Url) {
+                        if (snapshot.type == Profile.Type.Url) {
                             if (snapshot.source.startsWith("https://", true)) {
                                 val client = OkHttpClient()
                                 val versionName = context.packageManager.getPackageInfo(context.packageName, 0).versionName
@@ -110,56 +109,37 @@ object ProfileProcessor {
                                     }
                                 }
                             }
-                            val new = Imported(
-                                snapshot.uuid,
-                                snapshot.name,
-                                snapshot.type,
-                                snapshot.source,
-                                snapshot.interval,
-                                upload,
-                                download,
-                                total,
-                                expire,
-                                old?.createdAt ?: System.currentTimeMillis()
-                            )
-                            if (old != null) {
-                                ImportedDao().update(new)
-                            } else {
-                                ImportedDao().insert(new)
-                            }
-
-                            PendingDao().remove(snapshot.uuid)
-
-                            context.pendingDir.resolve(snapshot.uuid.toString())
-                                .deleteRecursively()
-
-                            context.sendProfileChanged(snapshot.uuid)
-                        } else if (snapshot?.type == Profile.Type.File) {
-                            val new = Imported(
-                                snapshot.uuid,
-                                snapshot.name,
-                                snapshot.type,
-                                snapshot.source,
-                                snapshot.interval,
-                                upload,
-                                download,
-                                total,
-                                expire,
-                                old?.createdAt ?: System.currentTimeMillis()
-                            )
-                            if (old != null) {
-                                ImportedDao().update(new)
-                            } else {
-                                ImportedDao().insert(new)
-                            }
-
-                            PendingDao().remove(snapshot.uuid)
-
-                            context.pendingDir.resolve(snapshot.uuid.toString())
-                                .deleteRecursively()
-
-                            context.sendProfileChanged(snapshot.uuid)
                         }
+
+                        val new = Imported(
+                            snapshot.uuid,
+                            snapshot.name,
+                            snapshot.type,
+                            snapshot.source,
+                            snapshot.interval,
+                            upload,
+                            download,
+                            total,
+                            expire,
+                            old?.createdAt ?: System.currentTimeMillis()
+                        )
+
+                        if (old != null) {
+                            ImportedDao().update(new)
+                        } else {
+                            ImportedDao().insert(new)
+                        }
+
+                        PendingDao().remove(snapshot.uuid)
+
+                        context.pendingDir.resolve(snapshot.uuid.toString())
+                            .deleteRecursively()
+
+                        // Jimmy - Set as active profile if it's newly imported or updated
+                        val store = ServiceStore(context)
+                        store.activeProfile = snapshot.uuid
+
+                        context.sendProfileChanged(snapshot.uuid)
                     }
                 }
             }
@@ -246,6 +226,12 @@ object ProfileProcessor {
 
                 pending.deleteRecursively()
                 imported.deleteRecursively()
+
+                // Jimmy - Automatically switch to the latest profile if the active one is deleted
+                val store = ServiceStore(context)
+                if (store.activeProfile == uuid) {
+                    store.activeProfile = ImportedDao().queryAllUUIDs().lastOrNull()
+                }
 
                 context.sendProfileChanged(uuid)
             }

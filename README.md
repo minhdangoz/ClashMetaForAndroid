@@ -95,4 +95,4 @@ First download it without cache config
 ./gradlew app:assembleAlphaRelease --no-configuration-cache
 
 
- am start -a android.intent.action.VIEW -d "clashmeta://install-config?url=http://file.thanglam.info/public/api/resources/download?hash=1LFw3yEqHcIZEjLeQO_ajQ"
+ am start -a android.intent.action.VIEW -d "clashmeta://install-config?url=http://file.thanglam.info/public/api/resources/download?hash=K5n00a6dpuwowNGoyEfBtA"

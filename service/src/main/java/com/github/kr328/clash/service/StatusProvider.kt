@@ -6,17 +6,46 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
 import com.github.kr328.clash.common.Global
+import com.github.kr328.clash.service.data.ImportedDao
+import com.github.kr328.clash.service.store.ServiceStore
+import kotlinx.coroutines.runBlocking
 
 class StatusProvider : ContentProvider() {
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
         return when (method) {
             METHOD_CURRENT_PROFILE -> {
-                return if (serviceRunning)
+                if (serviceRunning) {
                     Bundle().apply {
                         putString("name", currentProfile)
                     }
-                else
-                    null
+                } else {
+                    runBlocking {
+                        val store = ServiceStore(context!!)
+                        val active = store.activeProfile
+                        if (active != null) {
+                            val name = ImportedDao().queryByUUID(active)?.name
+                            if (name != null) {
+                                return@runBlocking Bundle().apply {
+                                    putString("name", name)
+                                }
+                            }
+                        }
+                        
+                        val latest = ImportedDao().queryAllUUIDs().lastOrNull()
+                        if (latest != null) {
+                            val name = ImportedDao().queryByUUID(latest)?.name
+                            if (name != null) {
+                                store.activeProfile = latest
+                                
+                                return@runBlocking Bundle().apply {
+                                    putString("name", name)
+                                }
+                            }
+                        }
+                        
+                        null
+                    }
+                }
             }
             else -> super.call(method, arg, extras)
         }
