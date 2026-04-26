@@ -64,3 +64,11 @@ fun Context.sendClashStopped(reason: String?) {
         )
     )
 }
+
+fun Context.sendClashResult(status: Boolean, message: String) {
+    val intent = Intent(Intents.ACTION_CLASH_RESULT)
+        .putExtra(Intents.EXTRA_STATUS, status)
+        .putExtra(Intents.EXTRA_MESSAGE, message)
+
+    sendBroadcastSelf(intent)
+}

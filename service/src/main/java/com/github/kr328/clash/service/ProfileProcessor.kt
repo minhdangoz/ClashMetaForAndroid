@@ -11,10 +11,7 @@ import com.github.kr328.clash.service.data.PendingDao
 import com.github.kr328.clash.service.model.Profile
 import com.github.kr328.clash.service.remote.IFetchObserver
 import com.github.kr328.clash.service.store.ServiceStore
-import com.github.kr328.clash.service.util.importedDir
-import com.github.kr328.clash.service.util.pendingDir
-import com.github.kr328.clash.service.util.processingDir
-import com.github.kr328.clash.service.util.sendProfileChanged
+import com.github.kr328.clash.service.util.*
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -55,92 +52,98 @@ object ProfileProcessor {
                 val force = snapshot.type != Profile.Type.File
                 var cb = callback
 
-                Clash.fetchAndValid(context.processingDir, snapshot.source, force) {
-                    try {
-                        cb?.updateStatus(it)
-                    } catch (e: Exception) {
-                        cb = null
+                try {
+                    Clash.fetchAndValid(context.processingDir, snapshot.source, force) {
+                        try {
+                            cb?.updateStatus(it)
+                        } catch (e: Exception) {
+                            cb = null
 
-                        Log.w("Report fetch status: $e", e)
-                    }
-                }.await()
+                            Log.w("Report fetch status: $e", e)
+                        }
+                    }.await()
 
-                profileLock.withLock {
-                    if (PendingDao().queryByUUID(snapshot.uuid) == snapshot) {
-                        context.importedDir.resolve(snapshot.uuid.toString())
-                            .deleteRecursively()
-                        context.processingDir
-                            .copyRecursively(context.importedDir.resolve(snapshot.uuid.toString()))
+                    profileLock.withLock {
+                        if (PendingDao().queryByUUID(snapshot.uuid) == snapshot) {
+                            context.importedDir.resolve(snapshot.uuid.toString())
+                                .deleteRecursively()
+                            context.processingDir
+                                .copyRecursively(context.importedDir.resolve(snapshot.uuid.toString()))
 
-                        val old = ImportedDao().queryByUUID(snapshot.uuid)
-                        var upload: Long = 0
-                        var download: Long = 0
-                        var total: Long = 0
-                        var expire: Long = 0
-                        if (snapshot.type == Profile.Type.Url) {
-                            if (snapshot.source.startsWith("https://", true)) {
-                                val client = OkHttpClient()
-                                val versionName = context.packageManager.getPackageInfo(context.packageName, 0).versionName
-                                val request = Request.Builder()
-                                    .url(snapshot.source)
-                                    .header("User-Agent", "ClashMetaForAndroid/$versionName")
-                                    .build()
+                            val old = ImportedDao().queryByUUID(snapshot.uuid)
+                            var upload: Long = 0
+                            var download: Long = 0
+                            var total: Long = 0
+                            var expire: Long = 0
+                            if (snapshot.type == Profile.Type.Url) {
+                                if (snapshot.source.startsWith("https://", true)) {
+                                    val client = OkHttpClient()
+                                    val versionName = context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                                    val request = Request.Builder()
+                                        .url(snapshot.source)
+                                        .header("User-Agent", "ClashMetaForAndroid/$versionName")
+                                        .build()
 
-                                client.newCall(request).execute().use { response ->
-                                    val userinfo = response.headers["subscription-userinfo"]
-                                    if (response.isSuccessful && userinfo != null) {
-                                        val flags = userinfo.split(";")
-                                        for (flag in flags) {
-                                            val info = flag.split("=")
-                                            when {
-                                                info[0].contains("upload") && info[1].isNotEmpty() -> upload =
-                                                    BigDecimal(info[1].split('.').first()).longValueExact()
+                                    client.newCall(request).execute().use { response ->
+                                        val userinfo = response.headers["subscription-userinfo"]
+                                        if (response.isSuccessful && userinfo != null) {
+                                            val flags = userinfo.split(";")
+                                            for (flag in flags) {
+                                                val info = flag.split("=")
+                                                when {
+                                                    info[0].contains("upload") && info[1].isNotEmpty() -> upload =
+                                                        BigDecimal(info[1].split('.').first()).longValueExact()
 
-                                                info[0].contains("download") && info[1].isNotEmpty() -> download =
-                                                    BigDecimal(info[1].split('.').first()).longValueExact()
+                                                    info[0].contains("download") && info[1].isNotEmpty() -> download =
+                                                        BigDecimal(info[1].split('.').first()).longValueExact()
 
-                                                info[0].contains("total") && info[1].isNotEmpty() -> total =
-                                                    BigDecimal(info[1].split('.').first()).longValueExact()
+                                                    info[0].contains("total") && info[1].isNotEmpty() -> total =
+                                                        BigDecimal(info[1].split('.').first()).longValueExact()
 
-                                                info[0].contains("expire") && info[1].isNotEmpty() ->  expire =
-                                                    (info[1].toDouble() * 1000).toLong()
+                                                    info[0].contains("expire") && info[1].isNotEmpty() ->  expire =
+                                                        (info[1].toDouble() * 1000).toLong()
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
+
+                            val new = Imported(
+                                snapshot.uuid,
+                                snapshot.name,
+                                snapshot.type,
+                                snapshot.source,
+                                snapshot.interval,
+                                upload,
+                                download,
+                                total,
+                                expire,
+                                old?.createdAt ?: System.currentTimeMillis()
+                            )
+
+                            if (old != null) {
+                                ImportedDao().update(new)
+                            } else {
+                                ImportedDao().insert(new)
+                            }
+
+                            PendingDao().remove(snapshot.uuid)
+
+                            context.pendingDir.resolve(snapshot.uuid.toString())
+                                .deleteRecursively()
+
+                            // Jimmy - Set as active profile if it's newly imported or updated
+                            val store = ServiceStore(context)
+                            store.activeProfile = snapshot.uuid
+
+                            context.sendProfileChanged(snapshot.uuid)
+                            context.sendClashResult(true, "Profile applied successfully")
                         }
-
-                        val new = Imported(
-                            snapshot.uuid,
-                            snapshot.name,
-                            snapshot.type,
-                            snapshot.source,
-                            snapshot.interval,
-                            upload,
-                            download,
-                            total,
-                            expire,
-                            old?.createdAt ?: System.currentTimeMillis()
-                        )
-
-                        if (old != null) {
-                            ImportedDao().update(new)
-                        } else {
-                            ImportedDao().insert(new)
-                        }
-
-                        PendingDao().remove(snapshot.uuid)
-
-                        context.pendingDir.resolve(snapshot.uuid.toString())
-                            .deleteRecursively()
-
-                        // Jimmy - Set as active profile if it's newly imported or updated
-                        val store = ServiceStore(context)
-                        store.activeProfile = snapshot.uuid
-
-                        context.sendProfileChanged(snapshot.uuid)
                     }
+                } catch (e: Exception) {
+                    context.sendClashResult(false, e.message ?: "Apply failed")
+                    throw e
                 }
             }
         }
@@ -192,24 +195,30 @@ object ProfileProcessor {
 
                 var cb = callback
 
-                Clash.fetchAndValid(context.processingDir, snapshot.source, true) {
-                    try {
-                        cb?.updateStatus(it)
-                    } catch (e: Exception) {
-                        cb = null
+                try {
+                    Clash.fetchAndValid(context.processingDir, snapshot.source, true) {
+                        try {
+                            cb?.updateStatus(it)
+                        } catch (e: Exception) {
+                            cb = null
 
-                        Log.w("Report fetch status: $e", e)
+                            Log.w("Report fetch status: $e", e)
+                        }
+                    }.await()
+
+                    profileLock.withLock {
+                        if (ImportedDao().exists(snapshot.uuid)) {
+                            context.importedDir.resolve(snapshot.uuid.toString()).deleteRecursively()
+                            context.processingDir
+                                .copyRecursively(context.importedDir.resolve(snapshot.uuid.toString()))
+
+                            context.sendProfileChanged(snapshot.uuid)
+                            context.sendClashResult(true, "Profile updated successfully")
+                        }
                     }
-                }.await()
-
-                profileLock.withLock {
-                    if (ImportedDao().exists(snapshot.uuid)) {
-                        context.importedDir.resolve(snapshot.uuid.toString()).deleteRecursively()
-                        context.processingDir
-                            .copyRecursively(context.importedDir.resolve(snapshot.uuid.toString()))
-
-                        context.sendProfileChanged(snapshot.uuid)
-                    }
+                } catch (e: Exception) {
+                    context.sendClashResult(false, e.message ?: "Update failed")
+                    throw e
                 }
             }
         }
@@ -257,6 +266,7 @@ object ProfileProcessor {
                     store.activeProfile = uuid
 
                     context.sendProfileChanged(uuid)
+                    context.sendClashResult(true, "Profile activated")
                 }
             }
         }

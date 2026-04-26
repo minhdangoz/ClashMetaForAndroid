@@ -7,9 +7,7 @@ import com.github.kr328.clash.common.log.Log
 import com.github.kr328.clash.service.clash.clashRuntime
 import com.github.kr328.clash.service.clash.module.*
 import com.github.kr328.clash.service.store.ServiceStore
-import com.github.kr328.clash.service.util.cancelAndJoinBlocking
-import com.github.kr328.clash.service.util.sendClashStarted
-import com.github.kr328.clash.service.util.sendClashStopped
+import com.github.kr328.clash.service.util.*
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.selects.select
@@ -38,6 +36,8 @@ class ClashService : BaseService() {
         install(SuspendModule(self))
 
         try {
+            sendClashResult(true, "Connected")
+            
             while (isActive) {
                 val quit = select<Boolean> {
                     close.onEvent {
@@ -59,8 +59,12 @@ class ClashService : BaseService() {
             Log.e("Create clash runtime: ${e.message}", e)
 
             reason = e.message
+            
+            sendClashResult(false, e.message ?: "Unknown error")
         } finally {
             withContext(NonCancellable) {
+                sendClashResult(false, reason ?: "Disconnected")
+
                 stopSelf()
             }
         }
