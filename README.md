@@ -97,6 +97,9 @@ First download it without cache config
 CREATE PROFILE | LOAD CONFIG
 am start -a android.intent.action.VIEW -d "clashmeta://install-config?url=http://file.thanglam.info/public/api/resources/download?hash=Ca-U6UbBceZ8v6rdKeCTBA"
 
+am start -a android.intent.action.VIEW -d "clashmeta://install-config?type=file&url=file:///storage/emulated/0/config.yaml&name=AutoHttpProxy"
+am start -a android.intent.action.VIEW -d "clashmeta://install-config?type=file&url=content:///storage/emulated/0/config.yaml&name=AutoHttpProxy"
+
 START
 am start -a com.cmcmedia.proxy.action.START_CLASH -n com.cmcmedia.proxy/com.github.kr328.clash.ExternalControlActivity
 

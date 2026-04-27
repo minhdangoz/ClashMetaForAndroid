@@ -2,6 +2,7 @@ package com.github.kr328.clash
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import com.github.kr328.clash.common.constants.Intents
@@ -22,7 +23,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
-import java.util.UUID
 import com.github.kr328.clash.design.R
 
 /**
@@ -33,21 +33,51 @@ import com.github.kr328.clash.design.R
  * 1. clash://install-config?url=…&name=…&type=url|file
  *    → create/reuse profile, commit, set active, start VPN, health-check, broadcast result
  *
+ *    File type URL formats accepted:
+ *      - Raw path  : /storage/emulated/0/config.yaml
+ *                    → normalized to file:///storage/emulated/0/config.yaml
+ *      - file URI  : file:///storage/emulated/0/config.yaml
+ *      - content   : content://com.example.provider/external_files/config.yaml
+ *                    → persistable URI permission is taken before handing to service
+ *
  * 2. ACTION_START_CLASH        – start VPN + health check + broadcast result
  * 3. ACTION_STOP_CLASH         – stop VPN + broadcast result
  * 4. ACTION_TOGGLE_CLASH       – toggle VPN
- * 5. ACTION_UPDATE_PROFILE     – re-commit active profile, restart VPN, health check
+ * 5. ACTION_UPDATE_PROFILE     – re-fetch active profile config, restart VPN, health check
  *
- * Result broadcast: com.cmcmedia.proxy.action.AUTOMATION_RESULT
+ * Result broadcast: com.cmcmedia.clash.action.AUTOMATION_RESULT
  * Extras: success(bool), event(string), message(string), health_ok(bool), latency_ms(long)
  */
 class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
 
     private val VPN_SETTLE_MS = 2_000L
-    private val REQUEST_VPN = 1001
 
     companion object {
-        const val ACTION_UPDATE_PROFILE = "com.cmcmedia.proxy.action.UPDATE_PROFILE"
+        const val ACTION_UPDATE_PROFILE = "com.cmcmedia.clash.action.UPDATE_PROFILE"
+
+        /**
+         * Normalize any file path/URI to a form that passes ProfileProcessor
+         * enforceFieldValid() and that importLocalFile() can open.
+         *
+         * Rules:
+         *  - Raw absolute path (/storage/…)  → file:///storage/…
+         *  - file:// URI                      → kept as-is
+         *  - content:// URI                   → kept as-is
+         *  - http/https                       → kept as-is (URL profiles)
+         */
+        fun normalizeFileUrl(raw: String): String {
+            if (raw.startsWith("content://") ||
+                raw.startsWith("file://") ||
+                raw.startsWith("http://") ||
+                raw.startsWith("https://")) {
+                return raw
+            }
+            // Raw absolute path — wrap in file:// scheme
+            if (raw.startsWith("/")) {
+                return "file://$raw"
+            }
+            return raw
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -115,19 +145,18 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
 
             AutoLog.i("ExtControl", "Updating active profile: name=${active.name} uuid=${active.uuid} source=${active.source}")
 
-            // --- Step 2: stop VPN if running so the new config can be applied cleanly ---
+            // --- Step 2: stop VPN if running so new config can be applied cleanly ---
             val wasRunning = Remote.broadcasts.clashRunning
             if (wasRunning) {
                 AutoLog.d("ExtControl", "Stopping VPN before profile update")
                 stopClashService()
-                // Wait for the stop broadcast to be processed
                 delay(1_000L)
             }
 
             // --- Step 3: re-fetch config for the imported profile ---
             // commit() only works on pending profiles (PendingDao).
-            // An active imported profile must use update() which calls
-            // ProfileProcessor.update() → re-downloads and validates the config.
+            // An active imported profile must use update() → ProfileProcessor.update()
+            // which re-downloads and validates the config from source URL.
             AutoLog.d("ExtControl", "Updating imported profile uuid=${active.uuid}")
             withProfile {
                 update(active.uuid)
@@ -157,30 +186,53 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
     // -------------------------------------------------------------------------
 
     private fun handleInstallConfig() {
-        val uri = intent.data ?: run {
+        val intentUri = intent.data ?: run {
             AutoLog.e("ExtControl", "ACTION_VIEW with no data URI")
             doFinish(); return
         }
 
-        val url = uri.getQueryParameter("url") ?: run {
-            AutoLog.e("ExtControl", "Missing 'url' query param in $uri")
+        val rawUrl = intentUri.getQueryParameter("url") ?: run {
+            AutoLog.e("ExtControl", "Missing 'url' query param in $intentUri")
             doFinish(); return
         }
 
-        val name = uri.getQueryParameter("name") ?: getString(R.string.new_profile)
-        val typeParam = uri.getQueryParameter("type")?.lowercase(Locale.getDefault())
+        val name = intentUri.getQueryParameter("name") ?: getString(R.string.new_profile)
+        val typeParam = intentUri.getQueryParameter("type")?.lowercase(Locale.getDefault())
         val profileType = when (typeParam) {
             "file" -> Profile.Type.File
             else   -> Profile.Type.Url
         }
 
-        AutoLog.i("ExtControl", "Install-config: name=$name type=$profileType url=$url")
+        // Normalize the URL before any further processing.
+        // Raw paths → file:// so enforceFieldValid() accepts them.
+        val url = normalizeFileUrl(rawUrl)
+
+        AutoLog.i("ExtControl", "Install-config: name=$name type=$profileType rawUrl=$rawUrl normalizedUrl=$url")
+
+        // For content:// URIs: take persistable read permission NOW while this
+        // activity still holds the transient grant from the calling app.
+        // RemoteService runs in a separate process and would otherwise have no
+        // access to the URI when ProfileProcessor.importLocalFile() runs later.
+        if (url.startsWith("content://")) {
+            try {
+                val contentUri = Uri.parse(url)
+                contentResolver.takePersistableUriPermission(
+                    contentUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+                AutoLog.d("ExtControl", "Took persistable read permission for $contentUri")
+            } catch (e: Exception) {
+                // Non-fatal: the caller may not have granted persistable permission.
+                // ProfileProcessor.importLocalFile() will still try; log for debug.
+                AutoLog.w("ExtControl", "Could not take persistable URI permission: ${e.message}")
+            }
+        }
 
         launch {
             try {
                 // --- Step 1: find or create profile ---
                 val profile = withProfile {
-                    AutoLog.d("ExtControl", "Querying all profiles to check for duplicate URL")
+                    AutoLog.d("ExtControl", "Querying all profiles to check for duplicate url")
                     val all = queryAll()
                     val existing = all.find { it.source == url }
 
@@ -188,7 +240,7 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
                         AutoLog.i("ExtControl", "Reusing existing profile uuid=${existing.uuid} name=${existing.name}")
                         existing
                     } else {
-                        AutoLog.i("ExtControl", "Creating new profile name=$name")
+                        AutoLog.i("ExtControl", "Creating new profile name=$name type=$profileType")
                         val uuid = create(profileType, name, url)
                         AutoLog.d("ExtControl", "Profile created uuid=$uuid, patching metadata")
                         patch(uuid, name, url, 0)
@@ -200,7 +252,7 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
                     doFinish(); return@launch
                 }
 
-                // --- Step 2: commit (download + validate + sets active automatically) ---
+                // --- Step 2: commit (validates config, sets active automatically) ---
                 if (profile.pending || !profile.imported) {
                     AutoLog.i("ExtControl", "Committing profile uuid=${profile.uuid}")
                     withProfile { commit(profile.uuid) }
@@ -223,36 +275,6 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-
-        if (requestCode == REQUEST_VPN) {
-            if (resultCode == RESULT_OK) {
-                AutoLog.i("ExtControl", "VPN permission granted")
-
-                // Start UI AFTER permission is granted
-                startActivity(
-                    MainActivity::class.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-
-                launch {
-                    startClashAndCheck()
-                }
-
-            } else {
-                AutoLog.e("ExtControl", "VPN permission denied")
-
-                sendResult(
-                    ResultBroadcast.Event.PROXY_STARTED,
-                    false,
-                    "VPN permission denied"
-                )
-
-                doFinish()
-            }
-        }
-    }
-
     // -------------------------------------------------------------------------
     // VPN start + health check
     // -------------------------------------------------------------------------
@@ -263,12 +285,10 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
         val vpnPermissionIntent = startClashService()
 
         if (vpnPermissionIntent != null) {
-            AutoLog.w("ExtControl", "⚠\uFE0F VPN permission required, launching MainActivity")
-            // do not start here, cause activity result not called
-            // startActivity(MainActivity::class.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            startActivityForResult(vpnPermissionIntent, REQUEST_VPN)
-            // sendResult(event, false, "VPN permission required – please grant in UI")
-            // doFinish()
+            AutoLog.w("ExtControl", "VPN permission required, launching MainActivity")
+            startActivity(MainActivity::class.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            sendResult(event, false, "VPN permission required – please grant in UI")
+            doFinish()
             return
         }
 
