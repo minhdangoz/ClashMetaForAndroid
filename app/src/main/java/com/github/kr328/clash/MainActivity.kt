@@ -152,12 +152,11 @@ class MainActivity : BaseActivity<MainDesign>() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val vpnPermissionIntent = startClashService()
 
-        val vpnRequest = VpnService.prepare(this)
-        if (vpnRequest != null){
+        if (vpnPermissionIntent != null) {
             Log.d("MainActivity", "VPN permission required")
-            startActivityForResult(vpnRequest, 100)
-            return
+            startActivityForResult(vpnPermissionIntent, 100)
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
