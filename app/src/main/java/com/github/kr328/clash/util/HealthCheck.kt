@@ -33,46 +33,59 @@ object HealthCheck {
         val message: String,
     )
 
-    suspend fun run(): Result = withContext(Dispatchers.IO) {
-        AutoLog.d("HealthCheck", "Starting check → $CHECK_URL")
+    suspend fun run(retries: Int = 3): Result = withContext(Dispatchers.IO) {
+        AutoLog.d("HealthCheck", "Starting check → $CHECK_URL (retries=$retries)")
 
-        val result = withTimeoutOrNull(TIMEOUT_MS.toLong()) {
-            runCatching {
-                val t0 = System.currentTimeMillis()
+        repeat(retries) { attempt ->
+            val attemptIndex = attempt + 1
+            AutoLog.d("HealthCheck", "Attempt $attemptIndex/$retries")
 
-                val conn = (URL(CHECK_URL).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = CONNECT_MS
-                    readTimeout = READ_MS
-                    instanceFollowRedirects = false
-                    requestMethod = "GET"
-                    setRequestProperty("Connection", "close")
+            val result = withTimeoutOrNull(TIMEOUT_MS.toLong()) {
+                runCatching {
+                    val t0 = System.currentTimeMillis()
+
+                    val conn = (URL(CHECK_URL).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = CONNECT_MS
+                        readTimeout = READ_MS
+                        instanceFollowRedirects = false
+                        requestMethod = "GET"
+                        setRequestProperty("Connection", "close")
+                    }
+
+                    val code = conn.responseCode
+                    val latency = System.currentTimeMillis() - t0
+                    conn.disconnect()
+
+                    val ok = (code == EXPECTED)
+
+                    AutoLog.i(
+                        "HealthCheck",
+                        "Attempt $attemptIndex → HTTP $code in ${latency}ms → ${if (ok) "PASS" else "FAIL"}"
+                    )
+
+                    Result(
+                        ok,
+                        code,
+                        latency,
+                        if (ok) "Proxy OK (${latency}ms)" else "Unexpected HTTP $code"
+                    )
+                }.getOrElse { t ->
+                    AutoLog.e("HealthCheck", "Attempt $attemptIndex exception: ${t.message}", t)
+                    Result(false, -1, -1, "Error: ${t.message}")
                 }
+            } ?: Result(false, -1, -1, "Timeout after ${TIMEOUT_MS}ms")
 
-                val code = conn.responseCode
-                val latency = System.currentTimeMillis() - t0
-                conn.disconnect()
+            // ✅ success → return immediately
+            if (result.ok) return@withContext result
 
-                val ok = (code == EXPECTED)
-                AutoLog.i(
-                    "HealthCheck",
-                    "HTTP $code in ${latency}ms → ${if (ok) "PASS" else "FAIL (expected $EXPECTED)"}"
-                )
-
-                Result(
-                    ok,
-                    code,
-                    latency,
-                    if (ok) "Proxy OK (${latency}ms)" else "Unexpected HTTP $code"
-                )
-            }.getOrElse { t ->
-                AutoLog.e("HealthCheck", "Exception: ${t.message}", t)
-                Result(false, -1, -1, "Error: ${t.message}")
+            // ⏳ optional small delay before retry (except last attempt)
+            if (attemptIndex < retries) {
+                kotlinx.coroutines.delay(300)
             }
         }
 
-        result ?: run {
-            AutoLog.w("HealthCheck", "Timed out after ${TIMEOUT_MS}ms")
-            Result(false, -1, -1, "Timeout after ${TIMEOUT_MS}ms")
-        }
+        // ❌ all attempts failed
+        AutoLog.w("HealthCheck", "All $retries attempts failed")
+        Result(false, -1, -1, "Failed after $retries attempts")
     }
 }

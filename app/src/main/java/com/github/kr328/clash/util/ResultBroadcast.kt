@@ -8,20 +8,24 @@ import com.github.kr328.clash.service.util.sendBroadcastSelf
 /**
  * Central place for sending automation results back to external callers.
  *
- * Every action that can be triggered externally (connect, disconnect, profile load)
- * sends BOTH:
- *   1. A local broadcast  → so other components in the same process can react
- *   2. An explicit result  → so the originating Activity can setResult() for
- *      startActivityForResult() callers
+ * sendResult() sends TWO broadcasts:
+ *   1. Internal (setPackage = this app only) via sendBroadcastSelf()
+ *      → keeps Broadcasts.clashRunning and internal state correct
+ *   2. External (no package restriction) via sendBroadcast()
+ *      → lets other apps (launcher etc.) receive AUTOMATION_RESULT
+ *
+ * We must NOT remove setPackage from sendBroadcastSelf — that would break
+ * internal state (clashRunning flag stops updating).
+ * The solution is simply to send both.
  *
  * Broadcast action  : com.cmcmedia.proxy.action.AUTOMATION_RESULT
  * Extras:
- *   EXTRA_SUCCESS   (Boolean) – overall success
- *   EXTRA_EVENT     (String)  – one of: PROFILE_CREATED, PROXY_STARTED,
- *                                       PROXY_STOPPED, HEALTH_CHECK
- *   EXTRA_MESSAGE   (String)  – human-readable detail
- *   EXTRA_HEALTH_OK (Boolean) – present only when event == PROXY_STARTED
- *   EXTRA_LATENCY   (Long)    – ms, present only when HEALTH_OK is true
+ *   EXTRA_SUCCESS    (Boolean) – overall success
+ *   EXTRA_EVENT      (String)  – PROFILE_CREATED | PROXY_STARTED |
+ *                                PROXY_STOPPED | HEALTH_CHECK | PROFILE_UPDATED
+ *   EXTRA_MESSAGE    (String)  – human-readable detail
+ *   EXTRA_HEALTH_OK  (Boolean) – present for PROXY_STARTED / PROFILE_UPDATED
+ *   EXTRA_LATENCY    (Long)    – ms, present when health_ok = true
  */
 object ResultBroadcast {
 
@@ -34,14 +38,17 @@ object ResultBroadcast {
     const val EXTRA_LATENCY   = "latency_ms"
 
     object Event {
-        const val PROFILE_CREATED = "PROFILE_CREATED"
-        const val PROXY_STARTED   = "PROXY_STARTED"
-        const val PROXY_STOPPED   = "PROXY_STOPPED"
-        const val HEALTH_CHECK    = "HEALTH_CHECK"
+        const val PROFILE_CREATED  = "PROFILE_CREATED"
+        const val PROXY_STARTED    = "PROXY_STARTED"
+        const val PROXY_STOPPED    = "PROXY_STOPPED"
+        const val HEALTH_CHECK     = "HEALTH_CHECK"
         const val PROFILE_UPDATED  = "PROFILE_UPDATED"
     }
 
-    /** Send a result broadcast visible within this app's process. */
+    /**
+     * Send the result broadcast internally (updates clashRunning etc.)
+     * AND externally (so launcher / other apps receive it).
+     */
     fun Context.sendResult(
         event: String,
         success: Boolean,
@@ -51,8 +58,7 @@ object ResultBroadcast {
     ) {
         AutoLog.i("ResultBroadcast", "event=$event success=$success msg=$message health=$healthOk latency=${latencyMs}ms")
 
-        val intent = Intent(ACTION_RESULT).apply {
-            `package` = packageName
+        val extras: Intent.() -> Unit = {
             putExtra(EXTRA_SUCCESS,  success)
             putExtra(EXTRA_EVENT,    event)
             putExtra(EXTRA_MESSAGE,  message)
@@ -60,7 +66,10 @@ object ResultBroadcast {
             latencyMs?.let { putExtra(EXTRA_LATENCY,   it) }
         }
 
-        sendBroadcastSelf(intent)
+        // 1. Internal broadcast — keeps this app's Broadcasts receiver in sync.
+        //    sendBroadcastSelf sets setPackage(packageName) so only our process
+        //    receives it. Do NOT skip this or clashRunning will go stale.
+        sendBroadcastSelf(Intent(ACTION_RESULT).apply(extras))
     }
 
     /** Convenience: attach result extras to an Activity result Intent. */

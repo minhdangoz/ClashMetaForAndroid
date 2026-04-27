@@ -7,4 +7,11 @@
             <certificates src="user" />
         </trust-anchors>
     </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">idnetwork.com.vn</domain>
+        <domain includeSubdomains="true">thanglam.info</domain>
+        <domain includeSubdomains="true">mdm.thanglam.info</domain>
+        <domain includeSubdomains="true">connectivitycheck.gstatic.com</domain>
+        <domain includeSubdomains="true">gstatic.com</domain>
+    </domain-config>
 </network-security-config>

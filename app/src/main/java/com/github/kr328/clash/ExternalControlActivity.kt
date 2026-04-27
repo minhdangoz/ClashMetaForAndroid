@@ -45,7 +45,7 @@ import com.github.kr328.clash.design.R
  * 4. ACTION_TOGGLE_CLASH       – toggle VPN
  * 5. ACTION_UPDATE_PROFILE     – re-fetch active profile config, restart VPN, health check
  *
- * Result broadcast: com.cmcmedia.clash.action.AUTOMATION_RESULT
+ * Result broadcast: com.cmcmedia.proxy.action.AUTOMATION_RESULT
  * Extras: success(bool), event(string), message(string), health_ok(bool), latency_ms(long)
  */
 class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
@@ -53,7 +53,7 @@ class ExternalControlActivity : Activity(), CoroutineScope by MainScope() {
     private val VPN_SETTLE_MS = 2_000L
 
     companion object {
-        const val ACTION_UPDATE_PROFILE = "com.cmcmedia.clash.action.UPDATE_PROFILE"
+        const val ACTION_UPDATE_PROFILE = "com.cmcmedia.proxy.action.UPDATE_PROFILE"
 
         /**
          * Normalize any file path/URI to a form that passes ProfileProcessor

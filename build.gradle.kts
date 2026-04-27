@@ -72,8 +72,8 @@ subprojects {
             minSdk = 21
             targetSdk = 35
 
-            versionName = "511.11.11"
-            versionCode = 5111111
+            versionName = "511.11.12"
+            versionCode = 5111112
 
             ndk {
                 abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")

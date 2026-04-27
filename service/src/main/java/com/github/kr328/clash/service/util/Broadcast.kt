@@ -7,10 +7,19 @@ import com.github.kr328.clash.common.constants.Permissions
 import java.util.*
 
 fun Context.sendBroadcastSelf(intent: Intent) {
-    sendBroadcast(
-        intent.setPackage(this.packageName),
-        Permissions.RECEIVE_SELF_BROADCASTS
-    )
+    // Internal broadcast (explicit + permission)
+    val internalIntent = Intent(intent).apply {
+        setPackage(this@sendBroadcastSelf.packageName)
+    }
+
+    sendBroadcast(internalIntent, Permissions.RECEIVE_SELF_BROADCASTS)
+
+    // External broadcast (implicit, no restriction)
+    val externalIntent = Intent(intent).apply {
+        setPackage(null)
+    }
+
+    sendBroadcast(externalIntent)
 }
 
 fun Context.sendProfileChanged(uuid: UUID) {
